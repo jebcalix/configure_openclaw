@@ -1,0 +1,43 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/home/USER/Proyectos/Repos/jebstudios_ai_assistant",
+      "model": { "primary": "ollama/qwen2.5:3b" },
+      "sandbox": { "mode": "all" }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "loopback",
+    "auth": { "mode": "token" }
+  },
+  "tools": {
+    "profile": "coding",
+    "byProvider": {
+      "ollama/qwen2.5:3b": {
+        "deny": ["group:web", "browser"]
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": false,
+      "dmPolicy": "pairing",
+      "botToken": {
+        "source": "env",
+        "provider": "default",
+        "id": "TELEGRAM_BOT_TOKEN"
+      },
+      "groups": { "*": { "requireMention": true } }
+    }
+  },
+  "models": {
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://127.0.0.1:11434",
+        "api": "ollama"
+      }
+    }
+  }
+}
