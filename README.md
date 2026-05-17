@@ -1,26 +1,220 @@
-# OpenClaw setup (CachyOS)
+# OpenClaw setup (Manjaro / Arch)
 
-Local notes for the OpenClaw installation on this machine. Secrets live outside this repo.
+Local notes and install guide for OpenClaw with **Ollama (local only)** on this machine. Secrets live outside this repo.
 
 ## Status
 
 | Component | Value |
 |-----------|--------|
 | OpenClaw | `2026.5.12` (`npm install -g openclaw@latest`) |
+| Node | `22.22.3` via nvm (required: `22.12+`) |
 | Gateway | `http://127.0.0.1:18789/` (loopback only) |
-| Model | `ollama/qwen2.5:3b` @ `http://127.0.0.1:11434` |
-| Workspace | `~/Proyectos/Repos/jebstudios_ai_assistant` |
-| Service | `systemctl --user` → `openclaw-gateway.service` |
-| Linger | `loginctl enable-linger jebcalix` (24/7 user services) |
+| Model | `ollama/qwen2.5:7b` @ `http://127.0.0.1:11434` |
+| Ollama | `0.22.1` (pacman `/usr/bin/ollama`) |
+| Ollama service | `systemctl --user` → `ollama.service` |
+| OpenClaw service | `systemctl --user` → `openclaw-gateway.service` |
+| GPU | AMD RX 580 8GB — Vulkan enabled; CPU inference if GPU not detected |
+
+## Prerequisites
+
+- **OS:** Manjaro, Arch, or CachyOS (pacman)
+- **Node.js:** 22.16+ (24 recommended). Install via [nvm](https://github.com/nvm-sh/nvm) or [nodejs.org](https://nodejs.org/)
+- **Ollama:** `sudo pacman -S ollama`
+- **Vulkan (AMD):** `sudo pacman -S --needed vulkan-radeon lib32-vulkan-radeon`
+- **Optional:** Docker (only if `sandbox.mode` is `all`)
+
+Hardware profile for this repo (reference):
+
+| Resource | This machine |
+|----------|----------------|
+| CPU | AMD Ryzen 5 4600G (6c / 12t) |
+| RAM | 30 GiB |
+| GPU | Radeon RX 580 8GB |
+
+## Install from scratch
+
+### 1. Node.js 22+
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.zshrc   # or ~/.bashrc
+nvm install 22
+nvm alias default 22
+nvm use 22
+node --version    # must be >= v22.12.0
+```
+
+Add Node to your shell `PATH` if needed:
+
+```bash
+export PATH="$HOME/.nvm/versions/node/$(node -v | tr -d v | cut -d. -f1-2).x/bin:$PATH"
+```
+
+### 2. Ollama (fix PATH, install package)
+
+**Critical:** An old Ollama binary at `/usr/local/bin/ollama` (v0.6.x) can shadow the pacman package and break the CLI. Remove it:
+
+```bash
+sudo mv /usr/local/bin/ollama /usr/local/bin/ollama.bak   # if present
+which ollama          # must be /usr/bin/ollama
+ollama --version      # must be 0.22.x
+```
+
+Install if missing:
+
+```bash
+sudo pacman -S ollama
+```
+
+#### User service (recommended, no root for daily use)
+
+Copy the example unit and enable it:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp config/ollama.service.example ~/.config/systemd/user/ollama.service
+systemctl --user daemon-reload
+systemctl --user enable --now ollama
+systemctl --user status ollama
+curl -s http://127.0.0.1:11434/api/tags
+```
+
+The example sets `OLLAMA_VULKAN=1` for AMD GPUs (RX 580). If Ollama logs show only `library=cpu`, inference still works on CPU/RAM.
+
+#### System service (alternative)
+
+```bash
+sudo systemctl enable --now ollama
+```
+
+Optional GPU drop-in for the **system** unit:
+
+```bash
+sudo mkdir -p /etc/systemd/system/ollama.service.d
+sudo tee /etc/systemd/system/ollama.service.d/vulkan.conf <<'EOF'
+[Service]
+Environment=OLLAMA_VULKAN=1
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+```
+
+### 3. Pull the local model
+
+| Model | When to use |
+|-------|-------------|
+| **`qwen2.5:7b`** (default) | Best balance for OpenClaw agents on 8GB VRAM or 30GB RAM |
+| **`qwen2.5:3b`** (fallback) | CPU-only or Telegram must reply faster; lower quality |
+
+```bash
+ollama pull qwen2.5:7b
+```
+
+Smoke test:
+
+```bash
+curl -s http://127.0.0.1:11434/api/chat -d '{
+  "model":"qwen2.5:7b",
+  "messages":[{"role":"user","content":"Reply with exactly: ok"}],
+  "stream":false,
+  "options":{"num_predict":10}
+}'
+```
+
+CPU fallback:
+
+```bash
+ollama pull qwen2.5:3b
+openclaw models set ollama/qwen2.5:3b
+openclaw gateway restart
+```
+
+### 4. Install OpenClaw
+
+```bash
+npm install -g openclaw@latest
+openclaw --version
+```
+
+### 5. Onboard (Ollama, local only)
+
+Interactive:
+
+```bash
+export OLLAMA_API_KEY=ollama-local
+openclaw onboard --install-daemon
+# Provider: Ollama → Local only → http://127.0.0.1:11434 → qwen2.5:7b
+```
+
+Non-interactive:
+
+```bash
+export OLLAMA_API_KEY=ollama-local
+openclaw onboard --non-interactive \
+  --auth-choice ollama \
+  --custom-base-url "http://127.0.0.1:11434" \
+  --custom-model-id "qwen2.5:7b" \
+  --accept-risk \
+  --install-daemon
+```
+
+Use the native Ollama URL (`http://127.0.0.1:11434`) — **not** `/v1` (breaks tool calling).
+
+### 6. Optional config hardening
+
+Merge patterns from [`config/openclaw.json.example`](config/openclaw.json.example):
+
+```bash
+openclaw config set agents.defaults.sandbox.mode '"off"' --strict-json
+openclaw config set tools.byProvider '{"ollama/qwen2.5:7b":{"deny":["group:web","browser"]}}' --strict-json
+openclaw gateway restart
+```
+
+### 7. Run 24/7 (user services)
+
+```bash
+loginctl enable-linger "$USER"   # may need: sudo loginctl enable-linger "$USER"
+systemctl --user enable --now ollama.service
+systemctl --user enable --now openclaw-gateway.service
+```
+
+Verify:
+
+```bash
+./scripts/verify-openclaw.sh
+openclaw dashboard
+```
+
+## GPU on AMD RX 580
+
+- **ROCm:** Modern ROCm drops Polaris (gfx803). Not required for this guide.
+- **Vulkan:** Set `OLLAMA_VULKAN=1` (see [`config/ollama.service.example`](config/ollama.service.example)).
+- **Verify:** After `ollama run qwen2.5:7b "hi"`, check logs for `library=cpu` vs GPU. If only CPU appears, `qwen2.5:7b` still runs on 30GB RAM but replies are slower; use `qwen2.5:3b` for snappier Telegram.
 
 ## Telegram stuck on "typing"
 
 If the bot never replies, check:
 
-1. **Ollama speed** — on CPU-only, `qwen2.5:3b` can take minutes per reply. Test: `curl -s http://127.0.0.1:11434/api/chat -d '{"model":"qwen2.5:3b","messages":[{"role":"user","content":"hi"}],"stream":false,"options":{"num_predict":10}}'`
+1. **Ollama speed** — on CPU, `qwen2.5:7b` can take minutes per reply. Test:
+
+```bash
+curl -s http://127.0.0.1:11434/api/chat -d '{"model":"qwen2.5:7b","messages":[{"role":"user","content":"hi"}],"stream":false,"options":{"num_predict":10}}'
+```
+
 2. **Stuck session** — `openclaw sessions cleanup && openclaw gateway restart`
-3. **Lighter config** (already applied on this machine): `sandbox.mode: off`, `thinkingDefault: off`
-4. **Better model** — use a cloud API in `openclaw configure`, or a smaller/faster local model, or enable GPU (ROCm/Vulkan) for Ollama on AMD.
+3. **Lighter config:** `sandbox.mode: off`, disable thinking in agent settings
+4. **Faster model** — `ollama pull qwen2.5:3b` and `openclaw models set ollama/qwen2.5:3b`
+
+## Fix common issues
+
+| Symptom | Fix |
+|---------|-----|
+| `openclaw: Node.js v22.12+ is required` | `nvm use 22` / `nvm alias default 22` |
+| `Gateway restart blocked` (binary 2026.4.x vs config 2026.5.x) | `nvm use 22.22.3` then `openclaw --version` must show **2026.5.12**; remove old copy: `nvm use 22.22.2 && npm uninstall -g openclaw` |
+| `could not connect to ollama` | `systemctl --user start ollama` |
+| Wrong Ollama version (0.6.x) | `sudo mv /usr/local/bin/ollama /usr/local/bin/ollama.bak` |
+| Gateway `ECONNREFUSED :18789` | `openclaw gateway restart` or `openclaw onboard --install-daemon` |
+| Services stop after logout | `sudo loginctl enable-linger "$USER"` |
 
 ## Quick commands
 
@@ -31,6 +225,7 @@ openclaw doctor             # Diagnostics
 openclaw logs --follow      # Live logs
 openclaw skills list        # Skills
 openclaw cron list          # Scheduled jobs
+openclaw models list --provider ollama
 ```
 
 ## Enable Telegram
@@ -39,7 +234,8 @@ openclaw cron list          # Scheduled jobs
 2. Store the token (not in git):
 
 ```bash
-cp ~/.config/openclaw/env.example ~/.config/openclaw/env
+mkdir -p ~/.config/openclaw
+cp config/env.example ~/.config/openclaw/env
 chmod 600 ~/.config/openclaw/env
 # Edit env and set: TELEGRAM_BOT_TOKEN=123456:ABC...
 ```
@@ -71,7 +267,10 @@ openclaw gateway restart
 |------|---------|
 | `~/.openclaw/openclaw.json` | Main config |
 | `~/.config/openclaw/env` | `TELEGRAM_BOT_TOKEN` (systemd loads via drop-in) |
-| `~/.config/systemd/user/openclaw-gateway.service.d/env.conf` | EnvironmentFile for gateway |
+| `~/.config/systemd/user/ollama.service` | User Ollama daemon |
+| `~/.config/systemd/user/openclaw-gateway.service` | OpenClaw gateway |
+| `config/openclaw.json.example` | Reference config for this repo |
+| `config/ollama.service.example` | User Ollama unit template |
 
 ## Installed ClawHub skills (workspace)
 
@@ -82,13 +281,13 @@ Bundled skills (e.g. `coding-agent`, `browser-automation`) are managed by OpenCl
 
 ## Automation
 
-- **Heartbeat:** `~/Proyectos/Repos/jebstudios_ai_assistant/HEARTBEAT.md` (30m interval)
-- **Cron:** weekday 08:00 `America/Mexico_City` — “Weekday morning check-in”
+- **Heartbeat:** configure in your agent workspace `HEARTBEAT.md`
+- **Cron:** `openclaw cron list`
 
 ## Security notes
 
 - Gateway binds to **loopback** only.
-- Small local model (`qwen2.5:3b`): sandbox `all`, web/browser tools denied for that model.
+- Local models: deny web/browser tools per provider in `tools.byProvider`.
 - Docker sandbox image required when `sandbox.mode` is `all`:
 
 ```bash
@@ -110,4 +309,5 @@ DOCKERFILE
 ## Docs
 
 - https://docs.openclaw.ai
+- https://docs.openclaw.ai/providers/ollama
 - https://docs.openclaw.ai/channels/telegram

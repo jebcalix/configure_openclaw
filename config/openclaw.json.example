@@ -2,8 +2,8 @@
   "agents": {
     "defaults": {
       "workspace": "/home/USER/Proyectos/Repos/jebstudios_ai_assistant",
-      "model": { "primary": "ollama/qwen2.5:3b" },
-      "sandbox": { "mode": "all" }
+      "model": { "primary": "ollama/qwen2.5:7b" },
+      "sandbox": { "mode": "off" }
     }
   },
   "gateway": {
@@ -15,6 +15,9 @@
   "tools": {
     "profile": "coding",
     "byProvider": {
+      "ollama/qwen2.5:7b": {
+        "deny": ["group:web", "browser"]
+      },
       "ollama/qwen2.5:3b": {
         "deny": ["group:web", "browser"]
       }
@@ -36,7 +39,8 @@
     "providers": {
       "ollama": {
         "baseUrl": "http://127.0.0.1:11434",
-        "api": "ollama"
+        "api": "ollama",
+        "apiKey": "OLLAMA_API_KEY"
       }
     }
   }

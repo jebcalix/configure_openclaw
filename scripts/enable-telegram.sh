@@ -2,11 +2,11 @@
 set -euo pipefail
 
 ENV_FILE="${HOME}/.config/openclaw/env"
-export PATH="${HOME}/.npm-global/bin:${PATH}"
+export PATH="${HOME}/.nvm/versions/node/v22.22.3/bin:${HOME}/.npm-global/bin:/usr/bin:${PATH}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "Missing ${ENV_FILE}"
-  echo "Copy env.example: cp ~/.config/openclaw/env.example ~/.config/openclaw/env"
+  echo "Copy env.example: cp config/env.example ~/.config/openclaw/env"
   exit 1
 fi
 
