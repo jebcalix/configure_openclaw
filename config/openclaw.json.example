@@ -3,6 +3,7 @@
     "defaults": {
       "workspace": "/home/USER/Proyectos/Repos/jebstudios_ai_assistant",
       "model": { "primary": "ollama/qwen2.5:7b" },
+      "thinkingDefault": "off",
       "sandbox": { "mode": "off" }
     }
   },

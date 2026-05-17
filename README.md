@@ -103,8 +103,8 @@ sudo systemctl restart ollama
 
 | Model | When to use |
 |-------|-------------|
-| **`qwen2.5:7b`** (default) | Best balance for OpenClaw agents on 8GB VRAM or 30GB RAM |
-| **`qwen2.5:3b`** (fallback) | CPU-only or Telegram must reply faster; lower quality |
+| **`qwen2.5:7b`** (default) | Best balance on **RX 580 8GB + Vulkan** (~8s replies); OpenClaw default after GPU setup |
+| **`qwen2.5:3b`** (fallback) | If 7b OOMs or you need the fastest replies; lower quality |
 
 ```bash
 ollama pull qwen2.5:7b
@@ -188,8 +188,20 @@ openclaw dashboard
 ## GPU on AMD RX 580
 
 - **ROCm:** Modern ROCm drops Polaris (gfx803). Not required for this guide.
-- **Vulkan:** Set `OLLAMA_VULKAN=1` (see [`config/ollama.service.example`](config/ollama.service.example)).
-- **Verify:** After `ollama run qwen2.5:7b "hi"`, check logs for `library=cpu` vs GPU. If only CPU appears, `qwen2.5:7b` still runs on 30GB RAM but replies are slower; use `qwen2.5:3b` for snappier Telegram.
+- **Vulkan (recommended):** On Arch/Manjaro the base `ollama` package is **CPU-only**. Install the Vulkan backend and enable the service:
+
+```bash
+./scripts/enable-ollama-gpu.sh
+# or manually:
+sudo pacman -S --needed ollama-vulkan vulkan-radeon lib32-vulkan-radeon
+sudo usermod -aG render,video "$USER"   # then log out/in
+cp config/ollama.service.example ~/.config/systemd/user/ollama.service
+systemctl --user daemon-reload && systemctl --user restart ollama
+```
+
+  `GGML_VK_VISIBLE_DEVICES=0` selects the discrete RX 580 (GPU 1 is integrated Renoir).
+
+- **Verify:** `journalctl --user -u ollama -n 30 | grep inference` should show `library=vulkan` and `AMD Radeon RX 580`, not `library=cpu`. Then `ollama run qwen2.5:7b "hi"` should be much faster than CPU-only.
 
 ## Telegram stuck on "typing"
 
