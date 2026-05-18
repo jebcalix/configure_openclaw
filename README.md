@@ -227,6 +227,34 @@ curl -s http://127.0.0.1:11434/api/chat -d '{"model":"qwen2.5:7b","messages":[{"
 | Wrong Ollama version (0.6.x) | `sudo mv /usr/local/bin/ollama /usr/local/bin/ollama.bak` |
 | Gateway `ECONNREFUSED :18789` | `openclaw gateway restart` or `openclaw onboard --install-daemon` |
 | Services stop after logout | `sudo loginctl enable-linger "$USER"` |
+| Telegram very slow vs `ollama run` | OpenClaw is connected to Ollama, but each reply runs the **agent** (large system prompt, optional auto-compaction, tool loop). Run `./scripts/fix-telegram-latency.sh`, then in Telegram send `/reset`. Expect ~20–45s on `qwen2.5:7b`, not sub-second like bare Ollama. |
+
+## Telegram feels slow (but `ollama run` is fast)
+
+OpenClaw **does** reach Ollama (`http://127.0.0.1:11434`). A direct `ollama run` or `curl /api/chat` only sends your short message. Telegram goes through the gateway agent, which adds workspace bootstrap, skills, tools, and session history — often **2+ Ollama calls** (compaction + reply).
+
+Typical causes seen on this machine:
+
+- `tools.profile: coding` → heavy tool loop (e.g. `sessions_list` repeated for minutes)
+- Bloated session transcripts → context overflow, auto-compaction, truncation at 4096/8192 tokens in Ollama logs
+- Mismatch: OpenClaw advertised 32k context while Ollama used 4k → slow failures
+
+**Fix (already applied in your config):**
+
+```bash
+./scripts/fix-telegram-latency.sh   # minimal tools, smaller bootstrap, archive big sessions
+# In Telegram:
+/reset
+```
+
+**Verify:**
+
+```bash
+curl -s http://127.0.0.1:11434/api/tags          # Ollama up
+openclaw gateway status                           # Gateway up, Telegram OK
+journalctl --user -u ollama -f                    # watch inference; avoid prompt=12000+ truncate
+openclaw logs --follow                            # agent/compaction errors
+```
 
 ## Quick commands
 
