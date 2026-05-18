@@ -2,6 +2,8 @@
 
 Local notes and install guide for OpenClaw with **Ollama (local only)** on this machine. Secrets live outside this repo.
 
+**Documentación en español (funcionalidades detalladas):** [docs/FUNCIONALIDADES.md](docs/FUNCIONALIDADES.md)
+
 ## Status
 
 | Component | Value |
