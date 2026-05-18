@@ -346,6 +346,18 @@ DOCKERFILE
 
 - Do not commit tokens or `~/.openclaw/openclaw.json` (contains gateway token).
 
+## OpenCode (terminal coding agent)
+
+Local AI coding in the terminal with the same Ollama model (`qwen2.5:7b`):
+
+```bash
+./scripts/install-opencode.sh
+source ~/.zshrc
+cd your-project && opencode
+```
+
+Full guide (Spanish): [docs/OPENCODE.md](docs/OPENCODE.md)
+
 ## Docs
 
 - https://docs.openclaw.ai
